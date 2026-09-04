@@ -33,7 +33,6 @@ import uuid
 import shutil
 import threading
 import base64
-import textwrap
 from io import BytesIO
 from datetime import datetime
 
@@ -209,80 +208,48 @@ def render_header() -> None:
     with open(APP_LOGO, "rb") as f:
         logo_data = base64.b64encode(f.read()).decode()
 
-    # IMPORTANT: st.markdown treats any line indented 4+ spaces as a
-    # markdown code block, which prints raw HTML as literal text instead
-    # of rendering it. textwrap.dedent() strips the common leading
-    # whitespace this f-string picks up from Python's own indentation,
-    # so every line starts at column 0 and actually renders as HTML.
-    hero_html = textwrap.dedent(f"""\
-        <style>
-        .ss-hero {{
-            text-align: center;
-            padding: 18px 10px 8px 10px;
-        }}
-        .ss-logo {{
-            width: 105px;
-            height: 105px;
-            object-fit: contain;
-            margin-bottom: 4px;
-        }}
-        .ss-title {{
-            font-size: 2.6rem;
-            font-weight: 750;
-            letter-spacing: -1.5px;
-            margin: 0;
-            line-height: 1.1;
-        }}
-        .ss-tagline {{
-            font-size: 1.05rem;
-            margin-top: 8px;
-            opacity: 0.72;
-        }}
-        .ss-pills {{
-            margin-top: 15px;
-        }}
-        .ss-pill {{
-            display: inline-block;
-            padding: 5px 11px;
-            margin: 3px;
-            border-radius: 999px;
-            background: rgba(128,128,128,0.10);
-            font-size: 0.82rem;
-        }}
-        .ss-description {{
-            max-width: 650px;
-            margin: 18px auto 22px auto;
-            text-align: center;
-            font-size: 0.98rem;
-            line-height: 1.6;
-            opacity: 0.78;
-        }}
-        .ss-section-title {{
-            font-size: 1.15rem;
-            font-weight: 650;
-            margin-bottom: 4px;
-        }}
-        </style>
+    # IMPORTANT: Markdown decides HTML-vs-code-block per line, and that
+    # decision resets after every blank line. A line indented 4+ spaces
+    # right after a blank line becomes an INDENTED CODE BLOCK, not HTML
+    # — no matter what tag is in it. textwrap.dedent() alone isn't
+    # enough here because nested divs (pills, description) sit one
+    # Python indentation level deeper than the outer <div>, so they
+    # still had 4 leading spaces after dedent. Fix: every line below is
+    # flush against column 0, with no leading whitespace anywhere, so
+    # there's no ambiguity for Markdown to misparse.
+    css = (
+        "<style>"
+        ".ss-hero{text-align:center;padding:18px 10px 8px 10px;}"
+        ".ss-logo{width:105px;height:105px;object-fit:contain;margin-bottom:4px;}"
+        ".ss-title{font-size:2.6rem;font-weight:750;letter-spacing:-1.5px;margin:0;line-height:1.1;}"
+        ".ss-tagline{font-size:1.05rem;margin-top:8px;opacity:0.72;}"
+        ".ss-pills{margin-top:15px;}"
+        ".ss-pill{display:inline-block;padding:5px 11px;margin:3px;border-radius:999px;"
+        "background:rgba(128,128,128,0.10);font-size:0.82rem;}"
+        ".ss-description{max-width:650px;margin:18px auto 22px auto;text-align:center;"
+        "font-size:0.98rem;line-height:1.6;opacity:0.78;}"
+        ".ss-section-title{font-size:1.15rem;font-weight:650;margin-bottom:4px;}"
+        "</style>"
+    )
 
-        <div class="ss-hero">
-            <img class="ss-logo" src="data:image/gif;base64,{logo_data}">
-            <div class="ss-title">ShareSpot</div>
-            <div class="ss-tagline">Share files. Keep them temporary.</div>
+    body = (
+        '<div class="ss-hero">'
+        f'<img class="ss-logo" src="data:image/gif;base64,{logo_data}">'
+        '<div class="ss-title">ShareSpot</div>'
+        '<div class="ss-tagline">Share files. Keep them temporary.</div>'
+        '<div class="ss-pills">'
+        '<span class="ss-pill">⚡ Quick sharing</span>'
+        '<span class="ss-pill">🔗 One-time link</span>'
+        '<span class="ss-pill">⏱️ 10-minute expiry</span>'
+        '</div>'
+        '<div class="ss-description">'
+        'Upload a file and get a secure link or QR code to share it. '
+        'Your file is removed after download — or automatically after 10 minutes.'
+        '</div>'
+        '</div>'
+    )
 
-            <div class="ss-pills">
-                <span class="ss-pill">⚡ Quick sharing</span>
-                <span class="ss-pill">🔗 One-time link</span>
-                <span class="ss-pill">⏱️ 10-minute expiry</span>
-            </div>
-
-            <div class="ss-description">
-                Upload a file and get a secure link or QR code to share it.
-                Your file is removed after download — or automatically after 10 minutes.
-            </div>
-        </div>
-        """)
-
-    st.markdown(hero_html, unsafe_allow_html=True)
+    st.markdown(css + body, unsafe_allow_html=True)
 
 
 def render_upload_page(base_url: str) -> None:
