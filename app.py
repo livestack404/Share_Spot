@@ -221,7 +221,7 @@ def render_header() -> None:
         "<style>"
         "div.block-container{padding-top:1.2rem;}"
         ".ss-hero{text-align:center;padding:0px 10px 8px 10px;}"
-        ".ss-logo{width:150px;height:150px;object-fit:contain;margin-bottom:4px;}"
+        ".ss-logo{width:180px;height:180px;object-fit:contain;margin-bottom:4px;}"
         ".ss-title{font-size:2.6rem;font-weight:750;letter-spacing:-1.5px;margin:0;line-height:1.1;}"
         ".ss-tagline{font-size:1.05rem;margin-top:8px;opacity:0.72;}"
         ".ss-pills{margin-top:15px;}"
