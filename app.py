@@ -32,6 +32,7 @@ import time
 import uuid
 import shutil
 import threading
+import base64
 from io import BytesIO
 from datetime import datetime
 
@@ -48,7 +49,7 @@ except ImportError:
 # Config
 # --------------------------------------------------------------------------
 APP_NAME = "Share_Spot"
-APP_EMOJI = "😎"  # existing standard emoji used as the app's logo/icon
+APP_LOGO = "app_logo.gif"
 STORAGE_DIR = "storage"
 METADATA_FILE = os.path.join(STORAGE_DIR, "metadata.json")
 EXPIRY_SECONDS = 10 * 60  # 10 minutes
@@ -58,7 +59,7 @@ os.makedirs(STORAGE_DIR, exist_ok=True)
 
 st.set_page_config(
     page_title=f"{APP_NAME} — Secure File Share",
-    page_icon=APP_EMOJI,
+    page_icon=APP_LOGO,
     layout="centered",
 )
 
@@ -200,20 +201,86 @@ def make_qr_image(data: str) -> BytesIO:
 # UI: Upload flow (default view)
 # --------------------------------------------------------------------------
 def render_header() -> None:
-    """Emoji + wordmark header, shown at the top of every page."""
-    col_logo, col_title = st.columns([1, 5], vertical_alignment="center")
-    with col_logo:
-        st.markdown(f"<span style='font-size:48px'>{APP_EMOJI}</span>", unsafe_allow_html=True)
-    with col_title:
-        st.markdown(f"## {APP_NAME.replace('_', '')}")
-        st.caption("Here for 10 minutes, then gone.")
+    """Logo + clean ShareSpot header, shown at the top of every page."""
+    with open(APP_LOGO, "rb") as f:
+        logo_data = base64.b64encode(f.read()).decode()
+
+    st.markdown(
+        f"""
+        <style>
+        .ss-hero {{
+            text-align: center;
+            padding: 18px 10px 8px 10px;
+        }}
+        .ss-logo {{
+            width: 105px;
+            height: 105px;
+            object-fit: contain;
+            margin-bottom: 4px;
+        }}
+        .ss-title {{
+            font-size: 2.6rem;
+            font-weight: 750;
+            letter-spacing: -1.5px;
+            margin: 0;
+            line-height: 1.1;
+        }}
+        .ss-tagline {{
+            font-size: 1.05rem;
+            margin-top: 8px;
+            opacity: 0.72;
+        }}
+        .ss-pills {{
+            margin-top: 15px;
+        }}
+        .ss-pill {{
+            display: inline-block;
+            padding: 5px 11px;
+            margin: 3px;
+            border-radius: 999px;
+            background: rgba(128,128,128,0.10);
+            font-size: 0.82rem;
+        }}
+        .ss-description {{
+            max-width: 650px;
+            margin: 18px auto 22px auto;
+            text-align: center;
+            font-size: 0.98rem;
+            line-height: 1.6;
+            opacity: 0.78;
+        }}
+        .ss-upload-title {{
+            font-size: 1.15rem;
+            font-weight: 650;
+            margin-bottom: 4px;
+        }}
+        </style>
+
+        <div class="ss-hero">
+            <img class="ss-logo" src="data:image/gif;base64,{logo_data}">
+            <div class="ss-title">ShareSpot</div>
+            <div class="ss-tagline">Share files. Keep them temporary.</div>
+
+            <div class="ss-pills">
+                <span class="ss-pill">⚡ Quick sharing</span>
+                <span class="ss-pill">🔗 One-time link</span>
+                <span class="ss-pill">⏱️ 10-minute expiry</span>
+            </div>
+
+            <div class="ss-description">
+                Upload a file and get a secure link or QR code to share it.
+                Your file is removed after download — or automatically after 10 minutes.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="ss-upload-title">📤 Choose a file to share</div>', unsafe_allow_html=True)
 
 
 def render_upload_page(base_url: str) -> None:
     render_header()
-    st.caption("Upload a file, share the QR code or link, and it self-destructs after download "
-               "(or after 10 minutes if unclaimed).")
-
     uploaded_file = st.file_uploader("Choose a file to share", label_visibility="visible")
 
     if uploaded_file is not None:
