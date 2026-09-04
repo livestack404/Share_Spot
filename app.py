@@ -220,31 +220,67 @@ def render_header() -> None:
     with open(APP_LOGO, "rb") as f:
         logo_data = base64.b64encode(f.read()).decode()
 
-    col_logo, col_title = st.columns(
-        [1, 5],
-        vertical_alignment="center"
+    # One-time CSS injection for a clean, consistent header layout.
+    st.markdown(
+        """
+        <style>
+            .ss-header {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                margin-bottom: 0.25rem;
+            }
+            .ss-logo {
+                width: 68px;
+                height: 47px;   /* matches cropped GIF's ~1.45:1 aspect ratio */
+                min-width: 68px;
+                object-fit: contain;  /* never crop/distort the animated art */
+            }
+            .ss-title {
+                font-size: 1.9rem;
+                font-weight: 700;
+                line-height: 1.15;
+                margin: 0;
+                padding: 0;
+            }
+            .ss-subtitle {
+                font-size: 0.95rem;
+                color: var(--text-color-secondary, #808495);
+                margin-top: 2px;
+            }
+            .ss-header-block {
+                margin-bottom: 1.25rem;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
-    with col_logo:
-        st.markdown(
-            f"<img src='data:image/gif;base64,{logo_data}' width='48'>",
-            unsafe_allow_html=True
-        )
-
-    with col_title:
-        st.markdown(
-            f"## {APP_NAME.replace('_', '')}"
-        )
-        st.caption("Here for 10 minutes, then gone.")
+    st.markdown(
+        f"""
+        <div class="ss-header-block">
+            <div class="ss-header">
+                <img class="ss-logo" src="data:image/gif;base64,{logo_data}">
+                <div>
+                    <p class="ss-title">{APP_NAME.replace('_', '')}</p>
+                    <p class="ss-subtitle">Here for 10 minutes, then gone.</p>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_upload_page(base_url: str) -> None:
     render_header()
 
-    st.caption(
-        "Upload a file, share the QR code or link, and it self-destructs "
-        "after download (or after 10 minutes if unclaimed)."
+    st.markdown(
+        "Upload a file, share the QR code or link, and it "
+        "**self-destructs after download** (or after 10 minutes if unclaimed)."
     )
+
+    st.write("")  # small breathing room before the uploader
 
     uploaded_file = st.file_uploader(
         "Choose a file to share",
