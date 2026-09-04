@@ -57,9 +57,14 @@ _LOCK = threading.Lock()
 
 os.makedirs(STORAGE_DIR, exist_ok=True)
 
+# Guard against a missing/renamed logo file breaking page_icon at import
+# time — falls back to a plain emoji icon instead of crashing the app
+# before Streamlit even has a chance to render anything.
+_page_icon = APP_LOGO if os.path.exists(APP_LOGO) else "📁"
+
 st.set_page_config(
     page_title=f"{APP_NAME} — Secure File Share",
-    page_icon=APP_LOGO,
+    page_icon=_page_icon,
     layout="centered",
 )
 
@@ -205,8 +210,15 @@ def make_qr_image(data: str) -> BytesIO:
 # --------------------------------------------------------------------------
 def render_header() -> None:
     """Logo + clean ShareSpot hero header, shown at the top of every page."""
-    with open(APP_LOGO, "rb") as f:
-        logo_data = base64.b64encode(f.read()).decode()
+    # Never let a missing/renamed logo file crash the whole app — every
+    # page calls render_header() first, so a bare open() failure here
+    # would take down the entire site instead of just hiding a logo.
+    logo_data = None
+    try:
+        with open(APP_LOGO, "rb") as f:
+            logo_data = base64.b64encode(f.read()).decode()
+    except OSError:
+        logo_data = None
 
     # IMPORTANT: Markdown decides HTML-vs-code-block per line, and that
     # decision resets after every blank line. A line indented 4+ spaces
@@ -221,7 +233,7 @@ def render_header() -> None:
         "<style>"
         "div.block-container{padding-top:1.2rem;}"
         ".ss-hero{text-align:center;padding:0px 10px 8px 10px;}"
-        ".ss-logo{width:180px;height:180px;object-fit:contain;margin-bottom:4px;}"
+        ".ss-logo{width:150px;height:150px;object-fit:contain;margin-bottom:4px;}"
         ".ss-title{font-size:2.6rem;font-weight:750;letter-spacing:-1.5px;margin:0;line-height:1.1;}"
         ".ss-tagline{font-size:1.05rem;margin-top:8px;opacity:0.72;}"
         ".ss-pills{margin-top:15px;}"
@@ -233,9 +245,14 @@ def render_header() -> None:
         "</style>"
     )
 
+    logo_html = (
+        f'<img class="ss-logo" src="data:image/gif;base64,{logo_data}">'
+        if logo_data else ""
+    )
+
     body = (
         '<div class="ss-hero">'
-        f'<img class="ss-logo" src="data:image/gif;base64,{logo_data}">'
+        f'{logo_html}'
         '<div class="ss-title">ShareSpot</div>'
         '<div class="ss-tagline">Share files. Keep them temporary.</div>'
         '<div class="ss-pills">'
