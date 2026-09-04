@@ -33,6 +33,7 @@ import uuid
 import shutil
 import threading
 import base64
+import textwrap
 from io import BytesIO
 from datetime import datetime
 
@@ -208,8 +209,12 @@ def render_header() -> None:
     with open(APP_LOGO, "rb") as f:
         logo_data = base64.b64encode(f.read()).decode()
 
-    st.markdown(
-        f"""
+    # IMPORTANT: st.markdown treats any line indented 4+ spaces as a
+    # markdown code block, which prints raw HTML as literal text instead
+    # of rendering it. textwrap.dedent() strips the common leading
+    # whitespace this f-string picks up from Python's own indentation,
+    # so every line starts at column 0 and actually renders as HTML.
+    hero_html = textwrap.dedent(f"""\
         <style>
         .ss-hero {{
             text-align: center;
@@ -275,9 +280,9 @@ def render_header() -> None:
                 Your file is removed after download — or automatically after 10 minutes.
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        """)
+
+    st.markdown(hero_html, unsafe_allow_html=True)
 
 
 def render_upload_page(base_url: str) -> None:
