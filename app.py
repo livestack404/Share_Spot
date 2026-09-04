@@ -301,7 +301,7 @@ def render_upload_page(base_url: str) -> None:
 
             col1, col2 = st.columns(2)
             with col1:
-                st.image(make_qr_image(share_url), caption="Scan to download", use_container_width=True)
+                st.image(make_qr_image(share_url), caption="Scan to download", width=200)
             with col2:
                 st.text_input("Shareable link", value=share_url, disabled=False)
                 st.caption(f"📄 {uploaded_file.name}")
