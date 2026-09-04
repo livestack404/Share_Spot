@@ -6,7 +6,7 @@ WHAT THIS APP DOES
 -------------------
 - Lets a user upload a file from any device.
 - Generates a unique, unguessable share link (UUID token) + QR code that
-  works over the public internet (no LAN/hotspot requirement).
+  works over the *public internet* (no LAN/hotspot requirement).
 - The receiver opens the link/QR on ANY network and downloads the file.
 - The file is deleted from the server the moment it is downloaded.
 - Any file that is never downloaded is auto-purged after 10 minutes.
@@ -32,7 +32,6 @@ import time
 import uuid
 import shutil
 import threading
-import base64
 from io import BytesIO
 from datetime import datetime
 
@@ -45,12 +44,11 @@ try:
 except ImportError:
     _HAS_JS = False
 
-
 # --------------------------------------------------------------------------
 # Config
 # --------------------------------------------------------------------------
 APP_NAME = "Share_Spot"
-APP_LOGO = "app_logo.gif"
+APP_EMOJI = "app_logo.gif"  # existing standard emoji used as the app's logo/icon
 STORAGE_DIR = "storage"
 METADATA_FILE = os.path.join(STORAGE_DIR, "metadata.json")
 EXPIRY_SECONDS = 10 * 60  # 10 minutes
@@ -89,7 +87,9 @@ def _save_metadata(data: dict) -> None:
 
 
 # --------------------------------------------------------------------------
-# Core file operations
+# Core file operations — every disk action is wrapped in try/except so a
+# race between two concurrent users (e.g. cleanup vs. download) can never
+# crash the server.
 # --------------------------------------------------------------------------
 def save_uploaded_file(uploaded_file) -> str:
     token = uuid.uuid4().hex
@@ -119,10 +119,9 @@ def get_file_entry(token: str):
 
 
 def delete_file_entry(token: str) -> bool:
-    """Remove both the physical file and its metadata record."""
+    """Remove both the physical file and its metadata record. Returns True on success."""
     metadata = _load_metadata()
     entry = metadata.get(token)
-
     if not entry:
         return False
 
@@ -130,38 +129,31 @@ def delete_file_entry(token: str) -> bool:
         if os.path.exists(entry["path"]):
             os.remove(entry["path"])
     except OSError:
-        pass
+        pass  # file already gone / locked — don't crash, still clear metadata
 
     try:
         del metadata[token]
         _save_metadata(metadata)
     except KeyError:
         pass
-
     return True
 
 
 def cleanup_expired_files() -> None:
-    """Purge any file older than EXPIRY_SECONDS."""
+    """Purge any file older than EXPIRY_SECONDS. Safe to call on every rerun."""
     metadata = _load_metadata()
     now = time.time()
-
     expired_tokens = [
-        tok
-        for tok, entry in metadata.items()
+        tok for tok, entry in metadata.items()
         if now - entry.get("uploaded_at", 0) > EXPIRY_SECONDS
     ]
-
     for tok in expired_tokens:
         try:
             entry = metadata.get(tok, {})
-
             if entry and os.path.exists(entry.get("path", "")):
                 os.remove(entry["path"])
-
         except OSError:
             pass
-
         metadata.pop(tok, None)
 
     if expired_tokens:
@@ -169,16 +161,13 @@ def cleanup_expired_files() -> None:
 
 
 # --------------------------------------------------------------------------
-# Dynamic base URL detection
+# Dynamic base URL detection (no hardcoded local IPs)
 # --------------------------------------------------------------------------
 def get_base_url() -> str:
     detected = ""
-
     if _HAS_JS:
         try:
-            detected = st_javascript(
-                "await fetch('').then(r => window.parent.location.origin)"
-            )
+            detected = st_javascript("await fetch('').then(r => window.parent.location.origin)")
         except Exception:
             detected = ""
 
@@ -187,15 +176,12 @@ def get_base_url() -> str:
 
     with st.sidebar:
         st.caption("Couldn't auto-detect this app's public URL.")
-
         manual = st.text_input(
             "App URL (for share links)",
             value=st.session_state.get("manual_base_url", ""),
             placeholder="https://your-app.streamlit.app",
         )
-
         st.session_state["manual_base_url"] = manual
-
     return manual.rstrip("/") if manual else ""
 
 
@@ -203,147 +189,36 @@ def make_qr_image(data: str) -> BytesIO:
     qr = qrcode.QRCode(box_size=8, border=2)
     qr.add_data(data)
     qr.make(fit=True)
-
-    img = qr.make_image(
-        fill_color="black",
-        back_color="white"
-    )
-
+    img = qr.make_image(fill_color="black", back_color="white")
     buf = BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
-
     return buf
 
 
 # --------------------------------------------------------------------------
-# UI: Header
+# UI: Upload flow (default view)
 # --------------------------------------------------------------------------
 def render_header() -> None:
-    """Clean ShareSpot landing header with animated GIF logo."""
-
-    with open(APP_LOGO, "rb") as f:
-        logo_data = base64.b64encode(f.read()).decode()
-
-    st.markdown(
-        f"""
-<style>
-.ss-hero {{
-    text-align: center;
-    padding: 12px 10px 5px 10px;
-}}
-
-.ss-logo {{
-    width: 105px;
-    height: 105px;
-    object-fit: contain;
-    display: block;
-    margin: 0 auto 8px auto;
-}}
-
-.ss-title {{
-    font-size: 2.6rem;
-    font-weight: 750;
-    letter-spacing: -1.5px;
-    margin: 0;
-    line-height: 1.1;
-}}
-
-.ss-tagline {{
-    font-size: 1.05rem;
-    margin-top: 8px;
-    opacity: 0.72;
-}}
-
-.ss-pills {{
-    margin-top: 16px;
-    text-align: center;
-}}
-
-.ss-pill {{
-    display: inline-block;
-    padding: 6px 12px;
-    margin: 3px;
-    border-radius: 999px;
-    background: rgba(128, 128, 128, 0.10);
-    font-size: 0.82rem;
-}}
-
-.ss-description {{
-    max-width: 650px;
-    margin: 18px auto 22px auto;
-    text-align: center;
-    font-size: 0.96rem;
-    line-height: 1.6;
-    opacity: 0.76;
-}}
-
-.ss-upload-title {{
-    font-size: 1.15rem;
-    font-weight: 650;
-    margin-top: 4px;
-    margin-bottom: 8px;
-}}
-</style>
-
-<div class="ss-hero">
-
-    <img
-        class="ss-logo"
-        src="data:image/gif;base64,{logo_data}"
-    >
-
-    <div class="ss-title">
-        ShareSpot
-    </div>
-
-    <div class="ss-tagline">
-        Share files. Keep them temporary.
-    </div>
-
-    <div class="ss-pills">
-        <span class="ss-pill">⚡ Quick sharing</span>
-        <span class="ss-pill">🔗 One-time link</span>
-        <span class="ss-pill">⏱️ 10-minute expiry</span>
-    </div>
-
-    <div class="ss-description">
-        Upload a file and get a secure link or QR code to share it.
-        Your file is removed after download — or automatically after 10 minutes.
-    </div>
-
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        '<div class="ss-upload-title">📤 Choose a file to share</div>',
-        unsafe_allow_html=True
-    )
+    """Emoji + wordmark header, shown at the top of every page."""
+    col_logo, col_title = st.columns([1, 5], vertical_alignment="center")
+    with col_logo:
+        st.markdown(f"<span style='font-size:48px'>{APP_EMOJI}</span>", unsafe_allow_html=True)
+    with col_title:
+        st.markdown(f"## {APP_NAME.replace('_', '')}")
+        st.caption("Here for 10 minutes, then gone.")
 
 
-# --------------------------------------------------------------------------
-# UI: Upload flow
-# --------------------------------------------------------------------------
 def render_upload_page(base_url: str) -> None:
     render_header()
+    st.caption("Upload a file, share the QR code or link, and it self-destructs after download "
+               "(or after 10 minutes if unclaimed).")
 
-    uploaded_file = st.file_uploader(
-        "Choose a file to share",
-        label_visibility="visible"
-    )
+    uploaded_file = st.file_uploader("Choose a file to share", label_visibility="visible")
 
     if uploaded_file is not None:
-
-        if st.button(
-            "🚀 Generate secure share link",
-            type="primary"
-        ):
-
-            with st.spinner(
-                "Encrypting token & preparing share link..."
-            ):
+        if st.button("🚀 Generate secure share link", type="primary"):
+            with st.spinner("Encrypting token & preparing share link..."):
                 token = save_uploaded_file(uploaded_file)
 
             if not token:
@@ -351,99 +226,50 @@ def render_upload_page(base_url: str) -> None:
                 return
 
             if not base_url:
-                st.warning(
-                    "Set the app URL in the sidebar so a working "
-                    "link/QR can be generated."
-                )
+                st.warning("Set the app URL in the sidebar so a working link/QR can be generated.")
                 return
 
             share_url = f"{base_url}/?token={token}"
-
-            st.success(
-                "✅ File ready to share! This link is single-use "
-                "and expires in 10 minutes."
-            )
+            st.success("✅ File ready to share! This link is single-use and expires in 10 minutes.")
 
             col1, col2 = st.columns(2)
-
             with col1:
-                st.image(
-                    make_qr_image(share_url),
-                    caption="Scan to download",
-                    use_container_width=True
-                )
-
+                st.image(make_qr_image(share_url), caption="Scan to download", use_container_width=True)
             with col2:
-                st.text_input(
-                    "Shareable link",
-                    value=share_url,
-                    disabled=False
-                )
-
-                st.caption(
-                    f"📄 {uploaded_file.name}"
-                )
-
-                st.caption(
-                    "⏳ Expires 10 minutes from now, "
-                    "or immediately after download."
-                )
+                st.text_input("Shareable link", value=share_url, disabled=False)
+                st.caption(f"📄 {uploaded_file.name}")
+                st.caption("⏳ Expires 10 minutes from now, or immediately after download.")
 
 
 # --------------------------------------------------------------------------
-# UI: Download flow
+# UI: Download flow (when ?token=... is present in the URL)
 # --------------------------------------------------------------------------
 def render_download_page(token: str) -> None:
     render_header()
-
     st.subheader("📥 Incoming File")
 
     entry = get_file_entry(token)
 
     if not entry:
-        st.error(
-            "⚠️ This link has expired or the file was already downloaded."
-        )
-
-        st.caption(
-            "Ask the sender to generate a new share link."
-        )
-
+        st.error("⚠️ This link has expired or the file was already downloaded.")
+        st.caption("Ask the sender to generate a new share link.")
         return
 
     age = time.time() - entry.get("uploaded_at", 0)
-
     if age > EXPIRY_SECONDS:
         delete_file_entry(token)
-
-        st.error(
-            "⚠️ This link has expired and the file has been "
-            "purged for privacy."
-        )
-
+        st.error("⚠️ This link has expired and the file has been purged for privacy.")
         return
 
-    remaining_min = max(
-        0,
-        int((EXPIRY_SECONDS - age) // 60)
-    )
-
-    st.info(
-        f"📄 **{entry['filename']}** — "
-        f"link expires in ~{remaining_min} min if not downloaded."
-    )
+    remaining_min = max(0, int((EXPIRY_SECONDS - age) // 60))
+    st.info(f"📄 **{entry['filename']}** — link expires in ~{remaining_min} min if not downloaded.")
 
     try:
         with open(entry["path"], "rb") as f:
             file_bytes = f.read()
-
     except OSError:
         delete_file_entry(token)
-
-        st.error(
-            "⚠️ This file is no longer available on the server."
-        )
-
+        st.error("⚠️ This file is no longer available on the server.")
         return
 
     downloaded = st.download_button(
@@ -455,12 +281,7 @@ def render_download_page(token: str) -> None:
 
     if downloaded:
         delete_file_entry(token)
-
-        st.success(
-            "✅ Download complete. The file has been permanently "
-            "wiped from the server for your privacy."
-        )
-
+        st.success("✅ Download complete. The file has been permanently wiped from the server for your privacy.")
         st.balloons()
 
 
@@ -471,20 +292,15 @@ def main() -> None:
     cleanup_expired_files()
 
     base_url = get_base_url()
-
     query_params = st.query_params
     token = query_params.get("token")
 
     if token:
-
         render_download_page(token)
-
         st.divider()
-
         if st.button("⬅️ Back to upload a new file"):
             st.query_params.clear()
             st.rerun()
-
     else:
         render_upload_page(base_url)
 
